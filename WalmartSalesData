@@ -31,6 +31,7 @@ CASE
 	WHEN EXTRACT(HOUR FROM time) >= 12 AND EXTRACT(HOUR FROM time) < 17 THEN 'Afternoon'
 	ELSE 'Evening'
 END;
+
 -- Day of Week
 ALTER TABLE sales 
 ADD COLUMN day_of_week VARCHAR(15)
