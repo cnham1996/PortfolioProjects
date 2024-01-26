@@ -1,0 +1,134 @@
+libname mylib '/home/u62243791/BAN130 Final';
+FILENAME REFFILE '/home/u62243791/BAN130 Final/AdventureWorks(2)(1).xlsx';
+
+/*Importing Product Sheet from AdventureWorks*/
+PROC IMPORT DATAFILE=REFFILE
+	DBMS=XLSX
+	OUT=mylib.product;
+	Sheet='Product';
+	GETNAMES=YES;
+RUN;
+/*Importing SalesOrderDetail Sheet from AdventureWorks*/
+proc import datafile=reffile
+	dbms=xlsx
+	out=mylib.salesdetails;
+	sheet='SalesOrderDetail';
+	getnames=yes;
+run;
+
+/*creating cleaned Product Data Set*/
+data product_clean;
+	set mylib.product (keep= ProductID Name ProductNumber Color ListPrice);
+	NumListPrice = input(listprice, 12.);
+	format NumListPrice dollar12.2;
+	drop listprice;
+	rename NumListPrice = ListPrice;
+if color = ' '
+	then color = 'NA';
+run;
+
+/*Creating Cleaned SalesOrderDetail dataset*/
+data SalesOrderDetail_Clean;
+	set mylib.salesdetails (Drop=CarrierTrackingNumber SpecialOfferID UnitPriceDiscount rowguid);
+
+	NumUnitPrice = input(UnitPrice, 8.);
+	NumLineTotal = input(LineTotal, 8.);	
+	NumOrderQty = input(OrderQty, 8.);
+	NumModDate = datepart(input(ModifiedDate, anydtdtm.));
+		
+format  NumUnitPrice dollar12.2 NumLineTotal dollar12.2 NumModDate mmddyy10. NumOrderQty 8.; 
+drop 	UnitPrice LineTotal OrderQty ModifiedDate;
+rename  NumUnitPrice = UnitPrice 
+		NumLineTotal = LineTotal 
+		NumOrderQty = OrderQty 
+		NumModDate = ModifiedDate;
+		
+run;
+
+/*Creating Cleaned SalesOrderDetail for 2013-2014 only*/
+data SalesOrderDetail_Clean;
+	set SalesOrderDetail_Clean;
+where year(ModifiedDate) in (2013,2014);
+run;
+
+
+/*sorting data sets*/
+
+proc sort data=work.product_clean;
+by ProductID;
+run;
+
+proc sort data=work.salesorderdetail_clean;
+by ProductID;
+run;
+
+/*Creating merge of salesorderdetails and product cleans*/
+data SalesDetails (drop=SalesOrderID SalesOrderDetailID ProductNumber ListPrice);
+	merge product_clean(in=in_products) 
+		  salesorderdetail_clean(in=in_sales);
+	by ProductID;
+	if in_products = 1 and in_sales = 1;
+run;
+
+
+/*creating SalesAnalysis dataset*/
+proc sort data= SalesDetails out=work.Salesdetails;
+by ProductID;
+run;
+
+data SalesAnalysis;
+	set work.salesdetails;
+	by ProductID;
+	if first.ProductID then Subtotal = 0;
+Subtotal + LineTotal;
+
+	if last.ProductID then
+		output;
+format Subtotal dollar20.2;
+run;
+
+/*Q1 How many Red color helmets were sold in 2013/2014*/
+proc print data=salesdetails n;
+	where name contains 'Helmet' and color = 'Red';
+run;
+
+proc print data=salesanalysis;
+	where name contains 'Helmet' and color = 'Red';
+run;
+
+/*Q2 How many items sold in 2013-2014 have Multicolor*/
+proc print data=SalesAnalysis n;
+	where color = 'Multi';
+run;
+
+/*Q3 What is the combined sales total for all helmets sold in 2013-2014*/
+proc print data=SalesAnalysis;
+	where name contains 'Helmet';
+	sum SubTotal;
+run;
+
+/*Q4 How many Yellow Color Touring-1000 were sold in 2013-2014*/
+
+proc print data=salesdetails;
+	where name contains 'Touring-1000' and color = 'Yellow';
+	sum OrderQty;
+run;
+
+proc print data=SalesAnalysis;
+	where name contains 'Touring-1000' and color = 'Yellow';
+	sum OrderQty;
+run;
+
+/*Q5 What was the total sales in 2013-2014*/
+proc print data=SalesAnalysis;
+	sum SubTotal;
+run;
+
+/*Q6 Graph of SubTotal among all products to determine which product sold the best*/
+title 'Frequency of colors sold';
+proc sgplot data=work.salesanalysis;
+	vbar color;
+run;
+quit;
+
+
